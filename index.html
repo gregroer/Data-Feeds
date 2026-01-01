@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>MetaMask Connect – FINAL FIX</title>
+
+  <!-- ✅ NO integrity, NO module, NO defer -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
+
+  <style>
+    body {
+      background: #0f172a;
+      color: white;
+      font-family: Arial, sans-serif;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      margin: 0;
+    }
+    .card {
+      background: #020617;
+      padding: 30px;
+      border-radius: 14px;
+      width: 420px;
+      text-align: center;
+    }
+    button {
+      width: 100%;
+      padding: 14px;
+      margin-top: 12px;
+      border-radius: 10px;
+      border: none;
+      font-size: 16px;
+      font-weight: bold;
+      cursor: pointer;
+      background: #38bdf8;
+      color: #020617;
+    }
+    #status {
+      margin-top: 15px;
+      white-space: pre-line;
+      color: #38bdf8;
+      font-weight: bold;
+    }
+  </style>
+</head>
+
+<body>
+
+<div class="card">
+  <h2>🔐 MetaMask Connection Test</h2>
+  <button id="connectBtn">Connect MetaMask</button>
+  <div id="status">Not connected</div>
+</div>
+
+<script>
+window.addEventListener("load", () => {
+
+  const statusEl = document.getElementById("status");
+
+  // 🔍 HARD PROOF CHECK
+  if (typeof window.ethers === "undefined") {
+    statusEl.innerText =
+      "❌ ethers.js DID NOT load.\n\n" +
+      "This is NOT a MetaMask issue.\n" +
+      "Check DevTools → Network → ethers.umd.min.js";
+    return;
+  }
+
+  document.getElementById("connectBtn").onclick = async () => {
+
+    // 📱 Mobile → open MetaMask browser
+    if (!window.ethereum) {
+      window.location.href =
+        "https://metamask.app.link/dapp/" +
+        window.location.host +
+        window.location.pathname;
+      return;
+    }
+
+    try {
+      const accounts = await window.ethereum.request({
+        method: "eth_requestAccounts"
+      });
+
+      const provider = new ethers.providers.Web3Provider(window.ethereum);
+      const network = await provider.getNetwork();
+
+      if (network.chainId !== 11155111) {
+        statusEl.innerText =
+          "❌ Wrong network.\nSwitch MetaMask to Sepolia.";
+        return;
+      }
+
+      statusEl.innerText =
+        "✅ Connected\n" +
+        accounts[0].slice(0, 6) +
+        "..." +
+        accounts[0].slice(-4);
+
+    } catch (err) {
+      console.error(err);
+      statusEl.innerText =
+        "❌ Connection failed\n" +
+        (err.message || "Unknown error");
+    }
+  };
+});
+</script>
+
+</body>
+</html>
