@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Sepolia Price Feeds – Auto Update</title>
+
+<!-- Ethers.js -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
+
+<style>
+body {
+  background: #0f172a;
+  color: white;
+  font-family: Arial, sans-serif;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  min-height: 100vh;
+  padding-top: 40px;
+  margin: 0;
+}
+.container {
+  background: #020617;
+  padding: 30px;
+  border-radius: 14px;
+  width: 520px;
+}
+button, select {
+  width: 100%;
+  padding: 12px;
+  margin-top: 12px;
+  border-radius: 10px;
+  border: none;
+  font-size: 16px;
+  font-weight: bold;
+  cursor: pointer;
+}
+button { background: #38bdf8; color: #020617; }
+select { background: white; color: #020617; }
+#status { margin-top: 12px; white-space: pre-line; font-weight: bold; color: #38bdf8; }
+#priceDisplay, #roundData, #history {
+  margin-top: 15px;
+  padding: 10px;
+  background: #1f2937;
+  border-radius: 10px;
+  font-family: monospace;
+  max-height: 200px;
+  overflow-y: auto;
+}
+</style>
+</head>
+
+<body>
+<div class="container">
+  <h2>🔗 Sepolia Chainlink Price Feeds</h2>
+
+  <button id="connectBtn">Connect MetaMask</button>
+  <div id="status">Not connected</div>
+
+  <select id="feedSelect">
+    <option value="">Select feed</option>
+  </select>
+
+  <div id="priceDisplay">Latest Price: -</div>
+  <div id="roundData">Round Data: -</div>
+  <div id="history">Price History: -</div>
+</div>
+
+<script>
+let provider, signer, contract;
+const CONTRACT_ADDRESS = "0x225d2dF3Cfb2Ef36fEa7790054D04aA4413Ea0Fe";
+let autoInterval = null;
+let history = [];
+
+// ABI for your contract
+const ABI = [
+  "function feedCount() view returns (uint256)",
+  "function getFeedInfo(uint256 index) view returns (string memory name, address aggregator)",
+  "function getLatestPrice(uint256 index) view returns (int256)",
+  "function getLatestRoundData(uint256 index) view returns (uint80 roundId, int256 answer, uint256 startedAt, uint256 updatedAt, uint80 answeredInRound)"
+];
+
+const statusEl = document.getElementById("status");
+const feedSelect = document.getElementById("feedSelect");
+const priceDisplay = document.getElementById("priceDisplay");
+const roundData = document.getElementById("roundData");
+const historyEl = document.getElementById("history");
+
+// Connect wallet
+document.getElementById("connectBtn").onclick = async () => {
+  if (!window.ethereum) {
+    window.location.href = "https://metamask.app.link/dapp/" + window.location.host + window.location.pathname;
+    return;
+  }
+
+  try {
+    const accounts = await window.ethereum.request({ method: "eth_requestAccounts" });
+    provider = new ethers.providers.Web3Provider(window.ethereum);
+    signer = provider.getSigner();
+
+    const network = await provider.getNetwork();
+    if (network.chainId !== 11155111) {
+      statusEl.innerText = "❌ Wrong network. Please switch MetaMask to Sepolia.";
+      return;
+    }
+
+    contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, signer);
+
+    statusEl.innerText = "✅ Connected\n" + accounts[0].slice(0,6) + "..." + accounts[0].slice(-4);
+
+    await loadFeeds();
+    startAutoUpdate();
+  } catch (err) {
+    console.error(err);
+    statusEl.innerText = "❌ Connection failed\n" + (err.message || "Unknown error");
+  }
+};
+
+// Load feeds into dropdown
+async function loadFeeds() {
+  const count = await contract.feedCount();
+  feedSelect.innerHTML = "<option value=''>Select feed</option>";
+  for (let i = 0; i < count; i++) {
+    const info = await contract.getFeedInfo(i);
+    feedSelect.innerHTML += `<option value="${i}">${info[0]}</option>`;
+  }
+}
+
+// Auto-update prices every 5 seconds
+function startAutoUpdate() {
+  if (autoInterval) clearInterval(autoInterval);
+  autoInterval = setInterval(updatePrice, 5000);
+}
+
+// Fetch latest price and round data
+async function updatePrice() {
+  const index = feedSelect.value;
+  if (!contract || index === "") return;
+
+  try {
+    const price = await contract.getLatestPrice(index);
+    priceDisplay.innerText = "Latest Price: " + (price/1e8).toString();
+
+    const data = await contract.getLatestRoundData(index);
+    roundData.innerText = 
+      `Round ID: ${data.roundId}\n` +
+      `Answer: ${data.answer/1e8}\n` +
+      `Started At: ${new Date(data.startedAt*1000).toLocaleString()}\n` +
+      `Updated At: ${new Date(data.updatedAt*1000).toLocaleString()}\n` +
+      `Answered In Round: ${data.answeredInRound}`;
+
+    // Add to history
+    history.unshift(`Feed ${feedSelect.options[index].text}: ${(data.answer/1e8).toFixed(4)} at ${new Date(data.updatedAt*1000).toLocaleTimeString()}`);
+    if (history.length > 20) history.pop();
+    historyEl.innerText = history.join("\n");
+
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+// Update immediately when selection changes
+feedSelect.addEventListener("change", updatePrice);
+</script>
+</body>
+</html>
